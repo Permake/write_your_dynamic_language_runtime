@@ -18,6 +18,7 @@ import fr.umlv.smalljs.rt.Failure;
 import fr.umlv.smalljs.rt.JSObject;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -57,66 +58,109 @@ public final class ASTInterpreter {
         visitVariable(trueBlock, env);
         visitVariable(falseBlock, env);
       }
-      case Literal _, Call _, Identifier _, Fun _, Return _, ObjectLiteral _, FieldAccess _,
-           FieldAssignment _, MethodCall _ -> {
+      case Literal _,Call _,Identifier _,Fun _,Return _,ObjectLiteral _,FieldAccess _,FieldAssignment _,MethodCall _ -> {
         // do nothing
       }
-    };
+    }
+    ;
   }
 
   static Object visit(Expr expression, JSObject env) {
     return switch (expression) {
       case Block(List<Expr> exprs, int lineNumber) -> {
-        if (true) {
-          throw new UnsupportedOperationException("TODO Block");
+        for (var expr : exprs) {
+          visit(expr, env);
         }
-        // TODO loop over all instructions
         yield UNDEFINED;
       }
-      case Literal(Object value, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO Literal");
-      }
+      case Literal(Object value, int lineNumber) -> value;
       case Call(Expr qualifier, List<Expr> args, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO Call");
+        var function = asJSObject(visit(qualifier, env), lineNumber);
+        var arguments = args.stream().map(arg -> visit(arg, env)).toArray();
+        yield function.invoke(UNDEFINED, arguments);
       }
       case Identifier(String name, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO Identifier");
+        var value = env.lookupOrDefault(name, null);
+        if (value == null) {
+          throw new Failure("at line " + lineNumber + ", variable " + name + " is not defined");
+        }
+        yield value;
       }
-      case VarAssignment(String name, Expr expr, boolean declaration, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO VarAssignment");
+      case VarAssignment(String name, Expr expr, _, int lineNumber) -> {
+        var value = visit(expr, env);
+        var oldValue = env.lookupOrDefault(name, null);
+        if (oldValue == null) {
+          throw new Failure("at line " + lineNumber + ", variable " + name + " is not defined");
+        }
+        env.register(name, value);
+        yield value;
       }
       case Fun(String name, List<String> parameters, boolean toplevel, Block body, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Fun");
-        //Object.Invoker invoker = new Object.Invoke() {
-        //  @Override
-        //  public Object invoke(Object receiver, Object... args) {
-        //    // check the arguments length
-        //    // create a new environment
-        //    // add this and all the parameters
-        //    // execute the body
-        //  }
-        //};
+        JSObject.Invoker invoker = new JSObject.Invoker() {
+          @Override
+          public Object invoke(Object receiver, Object... args) {
+            // check the arguments length
+            if (args.length != parameters.size()) {
+              throw new Failure(
+                  "at line " + lineNumber + ", function " + name + " called with wrong number of parameters");
+            }
+            // create a new environment
+            var newEnv = JSObject.newEnv(env);
+            // add this and all the parameters
+            newEnv.register("this", receiver);
+            for (var i = 0; i < parameters.size(); i++) {
+              newEnv.register(parameters.get(i), args[i]);
+            }
+            // execute the body
+            try {
+              execute(body, newEnv);
+            } catch (ReturnError error) {
+              return error.getValue();
+            }
+            return UNDEFINED;
+          }
+        };
         // create the JS function with the invoker
+        var function = JSObject.newFunction(name, invoker);
         // register it into the global env if it's a toplevel
+        if (toplevel) {
+          env.register(name, function);
+        }
         // yield the function
+        yield function;
       }
       case Return(Expr expr, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Return");
+        var value = visit(expr, env);
+        throw new ReturnError(value);
       }
       case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO If");
+        var conditionValue = visit(condition, env);
+        if (conditionValue instanceof Integer conditionInt && conditionInt == 0) {
+          visit(falseBlock, env);
+        } else {
+          visit(trueBlock, env);
+        }
+        yield UNDEFINED;
       }
       case ObjectLiteral(Map<String, Expr> initMap, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO ObjectLiteral");
+        var object = JSObject.newObject(null);
+        initMap.forEach((key, expr) -> object.register(key, visit(expr, env)));
+        yield object;
       }
       case FieldAccess(Expr receiver, String name, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO FieldAccess");
+        var object = asJSObject(visit(receiver, env), lineNumber);
+        yield object.lookupOrDefault(name, UNDEFINED);
       }
       case FieldAssignment(Expr receiver, String name, Expr expr, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO FieldAssignment");
+        var object = asJSObject(visit(receiver, env), lineNumber);
+        object.register(name, visit(expr, object));
+        yield UNDEFINED;
       }
       case MethodCall(Expr receiver, String name, List<Expr> args, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO MethodCall");
+        var object = asJSObject(visit(receiver, env), lineNumber);
+        var method = asJSObject(object.lookupOrDefault(name, null), lineNumber);
+        var arguments = args.stream().map(arg -> visit(arg, object)).toArray();
+        yield method.invoke(object, arguments);
       }
     };
   }
@@ -137,10 +181,14 @@ public final class ASTInterpreter {
     globalEnv.register("%", JSObject.newFunction("%", (_, args) -> (Integer) args[0] % (Integer) args[1]));
     globalEnv.register("==", JSObject.newFunction("==", (_, args) -> args[0].equals(args[1]) ? 1 : 0));
     globalEnv.register("!=", JSObject.newFunction("!=", (_, args) -> !args[0].equals(args[1]) ? 1 : 0));
-    globalEnv.register("<", JSObject.newFunction("<", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) < 0) ? 1 : 0));
-    globalEnv.register("<=", JSObject.newFunction("<=", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) <= 0) ? 1 : 0));
-    globalEnv.register(">", JSObject.newFunction(">", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) > 0) ? 1 : 0));
-    globalEnv.register(">=", JSObject.newFunction(">=", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) >= 0) ? 1 : 0));
+    globalEnv.register("<",
+        JSObject.newFunction("<", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) < 0) ? 1 : 0));
+    globalEnv.register("<=",
+        JSObject.newFunction("<=", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) <= 0) ? 1 : 0));
+    globalEnv.register(">",
+        JSObject.newFunction(">", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) > 0) ? 1 : 0));
+    globalEnv.register(">=",
+        JSObject.newFunction(">=", (_, args) -> (((Comparable<Object>) args[0]).compareTo(args[1]) >= 0) ? 1 : 0));
     return globalEnv;
   }
 
@@ -150,4 +198,3 @@ public final class ASTInterpreter {
     execute(body, globalEnv);
   }
 }
-
