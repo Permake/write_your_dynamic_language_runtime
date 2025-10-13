@@ -116,15 +116,14 @@ public final class StackInterpreter {
           dumpStack("in lookup", stack, sp, bp, dict, heap);
         }
         case Instructions.REGISTER -> {
-          throw new UnsupportedOperationException("TODO REGISTER");
           // find the current instruction
-          // int indexTagValue = ...
+          int indexTagValue = instrs[pc++];
           // decode the name from the instructions
-          // String name = ...
+          String name = (String) decodeDictObject(indexTagValue, dict);
           // pop the value from the stack and decode it
-          // Object value = ...
+          Object value = decodeAnyValue(pop(stack, --sp), dict, heap);
           // register it in the global environment
-          // globalEnv.register(...);
+          globalEnv.register(name, value);
         }
         case Instructions.LOAD -> {
           // get local offset
@@ -153,15 +152,14 @@ public final class StackInterpreter {
           --sp;
         }
         case Instructions.SWAP -> {
-          throw new UnsupportedOperationException("TODO SWAP");
           // pop first value from the stack
-          // var value1 = ...
+          var value1 = pop(stack, --sp);
           // pop second value from the stack
-          // var value2 = ...
+          var value2 = pop(stack, --sp);
           // push first value on top of the stack
-          // push(...);
+          push(stack, sp++, value1);
           // push second value on top of the stack
-          // push(...);
+          push(stack, sp++, value2);
         }
         case Instructions.FUNCALL -> {
           // DEBUG
@@ -203,8 +201,8 @@ public final class StackInterpreter {
               args[i] = decodeAnyValue(stack[baseArg + i], dict, heap);
             }
 
-            // System.err.println("call native " + newFunction.name() + " with " +
-            // receiver + " " + java.util.Arrays.toString(args));
+            System.err.println("call native " + newFunction.name() + " with " +
+                receiver + " " + java.util.Arrays.toString(args));
 
             // call native function
             var result = encodeAnyValue(newFunction.invoke(receiver, args), dict);
@@ -219,38 +217,37 @@ public final class StackInterpreter {
           // throw new UnsupportedOperationException("TODO FUNCALL");
 
           // initialize new code
-          // code = (Code) maybeCode;
+          code = (Code) maybeCode;
 
           // check number of arguments
-          // if (code.parameterCount() != argumentCount + 1/* this */) {
-          // throw new Failure("wrong number of arguments for " + newFunction.name() + "
-          // expected "
-          // + (code.parameterCount() - 1) + " but was " + argumentCount);
-          // }
+          if (code.parameterCount() != argumentCount + 1/* this */) {
+            throw new Failure("wrong number of arguments for " + newFunction.name() +
+                "expected " + (code.parameterCount() - 1) + " but was " + argumentCount);
+          }
 
           // save bp/pc/code in activation zone
-          // stack[activation + offset] = ??
-          // var activation = ...;
-          // stack[activation + BP_OFFSET] = ...;
-          // stack[activation + PC_OFFSET] = ...;
-          // stack[activation + FUN_OFFSET] = ...;
+          // stack[activation + offset] = ???;
+          var activation = baseArg - 1 + code.slotCount();
+          stack[activation + BP_OFFSET] = bp;
+          stack[activation + PC_OFFSET] = pc;
+          stack[activation + FUN_OFFSET] = encodeDictObject(function, dict);
 
           // initialize pc, bp and sp
-          // pc = ...
-          // bp = ...
-          // sp = ...
+          pc = 0;
+          bp = baseArg - 1;
+          sp = activation + ACTIVATION_SIZE;
 
           // initialize all locals that are not parameters
-          // for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
-          // stack[i] = undefined;
-          // }
+          for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
+            stack[i] = undefined;
+          }
 
           // initialize function and instrs of the new function
-          // function = newFunction;
-          // instrs = code.instrs();
+          function = newFunction;
+          instrs = code.instrs();
 
           // DEBUG
-          // dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
+          dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
         }
         case Instructions.RET -> {
           // DEBUG
@@ -268,22 +265,20 @@ public final class StackInterpreter {
             // end of the interpreter
             return decodeAnyValue(result, dict, heap);
           }
-          throw new UnsupportedOperationException("NYI");
-
           // restore sp, function and bp
-          // sp = ...;
-          // function = (JSObject) ...;
-          // bp = ...;
+          sp = bp - 1; /* qualifier */
+          function = (JSObject) decodeDictObject(stack[activation + FUN_OFFSET], dict);
+          bp = stack[activation + BP_OFFSET];
 
           // restore code and instrs
-          // code = (Code) ...;
-          // instrs = code.instrs();
+          code = (Code) function.lookupOrDefault("__code__", null);
+          instrs = code.instrs();
 
           // push return value
-          // push(...);
+          push(stack, sp++, result);
 
           // DEBUG
-          // dumpStack("> end ret dump", stack, sp, bp, dict, heap);
+          dumpStack("> end ret dump", stack, sp, bp, dict, heap);
         }
         case Instructions.GOTO -> {
           throw new UnsupportedOperationException("TODO GOTO");
