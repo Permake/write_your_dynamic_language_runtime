@@ -144,7 +144,7 @@ public class StackInterpreterInstrTests {
 		}
 	}
 
-/*
+
 	@Nested
 	public class Q6 {
 		@Test
@@ -1027,7 +1027,7 @@ public class StackInterpreterInstrTests {
 			assertEquals("2\n9\n", execute(new Code(main, 1, 1), dict));
 		}
 	}
-
+/**
 	@Nested
 	public class Q13 {
 		@Test

@@ -281,81 +281,81 @@ public final class StackInterpreter {
           dumpStack("> end ret dump", stack, sp, bp, dict, heap);
         }
         case Instructions.GOTO -> {
-          throw new UnsupportedOperationException("TODO GOTO");
           // get the label
-          // int label = ...
+          int label = instrs[pc++];
           // change the program counter to the label
-          // pc = ...
+          pc = label;
         }
         case Instructions.JUMP_IF_FALSE -> {
-          throw new UnsupportedOperationException("TODO JUMP_IF_FALSE");
           // get the label
-          // var label = ...
+          var label = instrs[pc++];
           // get the value on top of the stack
-          // var condition = ...
+          var condition = pop(stack, --sp);
           // if condition is false change the program counter to the label
-          // if (condition == TagValues.FALSE) {
-          // pc = label;
-          // }
+          if (condition == TagValues.FALSE) {
+            pc = label;
+          }
         }
         case Instructions.NEW -> {
-          throw new UnsupportedOperationException("TODO NEW");
           // get the class from the instructions
-          // var vClass = instrs[pc++];
-          // var clazz = (JSObject) ...;
+          var vClass = instrs[pc++];
+          var clazz = (JSObject) decodeDictObject(vClass, dict);
 
           // out of memory ?
-          // if (hp + OBJECT_HEADER_SIZE + clazz.length() >= heap.length) {
-          // dumpHeap("before GC ", heap, hp, dict);
+          if (hp + TagValues.OBJECT_HEADER_SIZE + clazz.length() >= heap.length) {
+          dumpHeap("before GC ", heap, hp, dict);
 
-          // throw new UnsupportedOperationException("TODO !!! GC !!!")
+          throw new UnsupportedOperationException("TODO !!! GC !!!");
 
-          // dumpHeap("after GC ", heap, hp, dict);
-          // }
+          dumpHeap("after GC ", heap, hp, dict);
+          }
 
-          // var ref = hp;
+          var ref = hp;
 
           // write the class on heap
-          // heap[ref] = ...
+          heap[ref] = vClass;
           // write the empty GC mark
-          // heap[ref + GC_OFFSET] = GC_EMPTY;
+          heap[ref + GC_OFFSET] = GC_EMPTY;
           // get all fields values from the stack and write them on heap
-          // var baseArg = ...;
-          // for (var i = 0; i < clazz.length(); i++) {
-          // heap[ref + OBJECT_HEADER_SIZE + i] = stack[baseArg + i];
-          // }
+          var baseArg = sp - clazz.length();
+          for (var i = 0; i < clazz.length(); i++) {
+          heap[ref + OBJECT_HEADER_SIZE + i] = stack[baseArg + i];
+          }
           // adjust stack pointer and heap pointer
-          // sp = ...
-          // hp += ...
+          sp = baseArg;
+          hp += OBJECT_HEADER_SIZE + clazz.length();
 
           // push the reference on top of the stack
-          // push(...);
+          push(stack, sp++, encodeReference(ref));
         }
         case Instructions.GET -> {
           throw new UnsupportedOperationException("TODO GET");
           // get field name from the instructions
-          // var fieldName = (String) ...
+          var fieldName = (String) decodeDictObject(instrs[pc++], dict);
 
           // get reference from the top of the stack
-          // int value = ...
-          // int ref = ...
+          int value = pop(stack, --sp);
+          if (!isReference(value)) {
+            throw new Failure("top of the stack is not reference");
+          }
+          int ref = decodeReference(value);
           // get class on heap from the reference
-          // int vClass = ...
+          int vClass = heap[ref];
           // get JSObject from class
-          // var clazz = (JSObject) decodeDictObject(vClass, dict);
+          var clazz = (JSObject) decodeDictObject(vClass, dict);
           // get field slot from JSObject
-          // var slot = ...
-          // if (slot == null) {
+          var slot = clazz.loopupOrDefault(fieldName, null)
+          if (slot == null) {
           // no slot, push undefined
-          // push(..);
-          // continue;
-          // }
+          push(stack, sp++, undefined);
+          continue;
+          }
           // get the field index
-          // int fieldIndex = ...
+          int fieldIndex = (int) slot;
           // get field value
-          // int fieldValue = ...
+          int fieldValue = heap[ref + OBJECT_HEADER_SIZE + fieldIndex];
           // push field value on top of the stack
-          // push(...);
+          push(stack, sp++, fieldValue);
         }
         case Instructions.PUT -> {
           throw new UnsupportedOperationException("TODO PUT");
