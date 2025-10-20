@@ -19,7 +19,6 @@ public class StackInterpreterTests {
     StackInterpreter.interpret(script, new PrintStream(outStream, false, StandardCharsets.UTF_8));
     return outStream.toString(StandardCharsets.UTF_8).replace("\r\n", "\n");
   }
-/*
   @Nested
   public class Q2 {
     @Test
@@ -37,7 +36,6 @@ public class StackInterpreterTests {
     }
   }
 
-  /*
   @Nested
   public class Q3 {
     @Test
@@ -520,5 +518,4 @@ public class StackInterpreterTests {
                   """));
     }
   }
-  */
 }

@@ -123,114 +123,106 @@ final class InstrRewriter {
 	private static void visit(Expr expression, JSObject env, InstrBuffer buffer, Dictionary dict) {
 		switch (expression) {
 			case Block(List<Expr> exprs, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Block");
-				// for each expression of the block
-					// visit the expression
-					// if the expression is not a statement (the value still on stack)
-					//if (!(instr instanceof Statement)) {
-						  // ask to remove the top of the stack
-						  // buffer.emit(POP);
-					//}
-				//}
+                // for each expression of the block
+                for(var expr : exprs) {
+                    // visit the expression
+                    visit(expr, env, buffer, dict);
+                	// if the expression is not a statement (the value still on stack)
+                    if (!(expr instanceof Statement)) {
+                        // ask to remove the top of the stack
+						buffer.emit(POP);
+					}
+				}
 			}
 			case Literal(Object literalValue, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Literal");
 				// test if the literal value is a positive integers
-				//if (literalValue instanceof Integer value && value >= 0) {
-				// emit a small int
-				//buffer.emit(...).emit(...);
-				//} else {
-				// emit a dictionary object
-				//buffer.emit(...).emit(...);
-				//}
+				if (literalValue instanceof Integer value && value >= 0) {
+				    // emit a small int
+				    buffer.emit(CONST).emit(encodeSmallInt(value));
+				} else {
+				    // emit a dictionary object
+				    buffer.emit(CONST).emit(encodeDictObject(literalValue, dict));
+				}
 			}
 			case Call(Expr qualifier, List<Expr> args, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Call");
 				// visit the qualifier
-				//visit(...);
+				visit(qualifier, env, buffer, dict);
 				// emit undefined
-				//buffer.emit(...).emit(...)
+				buffer.emit(CONST).emit(encodeDictObject(UNDEFINED, dict));
 				// visit all arguments
-				//for (var arg : args) {
-				//	visit(...);
-				//}
+				for (var arg : args) {
+                    visit(arg, env, buffer, dict);
+				}
 				// emit the funcall
-				//buffer.emit(...).emit(...);
+				buffer.emit(FUNCALL).emit(args.size());
 			}
 			case Identifier(String name, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Identifier");
-				// get the local variable name
-				//var name = ...
 				// find if there is a local variable in the environment with the name
-				//var slot = env.lookupOrDefault(...);
-				//if (slot == null) {
+				var slot = env.lookupOrDefault(name, null);
+				if (slot == null) {
 				// emit a lookup with the name
-				//  buffer.emit(...).emit(...);
-				//} else {
+				  buffer.emit(LOOKUP).emit(encodeDictObject(name, dict));
+				} else {
 				// load the local variable with the slot
-				//  buffer.emit(...).emit(...);
-				//}
+				  buffer.emit(LOAD).emit((int) slot);
+				}
 			}
-			case VarAssignment(String name, Expr expr, boolean declaration, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO VarAssignment");
+			case VarAssignment(String name, Expr expr, _, int lineNumber) -> {
 				// visit the expression
-				// visit(...);
+				visit(expr, env, buffer, dict);
 				// find if there is a local variable in the env from the name
-				//var slot = env.lookupOrDefault(...);
-				//if (slot == null) {
-				//	throw new Failure("unknown variable " + name);
-				//}
+				var slot = env.lookupOrDefault(name, null);
+				if (slot == null) {
+					throw new Failure("unknown variable " + name);
+				}
 				// emit a store at the variable slot
-				//buffer.emit(...).emit(...);
+				buffer.emit(STORE).emit((int) slot);
 			}
 			case Fun(String name, List<String> parameters, boolean topLevel, Block body, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Fun");
 				// create a JSObject function
-				// var function = createFunction(name, parameters, body, dict, globalEnv);
+				var function = createFunction(name, parameters, body, dict);
 				// emit a const on the function
-				//buffer.emit(...).emit(...);
+				buffer.emit(CONST).emit(encodeDictObject(function, dict));
 				// if it's a toplevel register the function in the global environment
-				//if (topLevel) {
-				//  buffer.emit(DUP);
-				//  buffer.emit(...).emit(...);
-				//}
+				if (topLevel) {
+				  buffer.emit(DUP);
+				  buffer.emit(REGISTER).emit(encodeDictObject(name, dict));
+				}
 			}
 			case Return(Expr expr, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Return");
 				// emit a visit of the expression
-				//visit(...);
+				visit(expr, env, buffer, dict);
 				// emit a RET
+                buffer.emit(RET);
 			}
 			case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO If");
 				// visit the condition
-				//visit(...);
+				visit(condition, env, buffer, dict);
 				// emit a JUMP_IF_FALSE and a placeholder
-				//var falsePlaceHolder = buffer.emit(JUMP_IF_FALSE).placeholder();
+				var falsePlaceHolder = buffer.emit(JUMP_IF_FALSE).placeholder();
 				// visit the true block
-				//visit(...);
+				visit(trueBlock, env, buffer, dict);
 				// emit a goto with another placeholder
-				//var endPlaceHolder = buffer.emit(GOTO).placeholder();
+				var endPlaceHolder = buffer.emit(GOTO).placeholder();
 				// patch the first placeholder
-				//buffer.patch(..., buffer.label());
+				buffer.patch(falsePlaceHolder, buffer.label());
 				// visit the false block
-				//visit(...);
+				visit(falseBlock, env, buffer, dict);
 				// patch the second placeholder
-				//buffer.patch(..., buffer.label());
+				buffer.patch(endPlaceHolder, buffer.label());
 			}
 			case ObjectLiteral(Map<String, Expr> initMap, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO ObjectLiteral");
 				// create a JSObject class
-				//var clazz = JSObject.newObject(null);
+				var clazz = JSObject.newObject(null);
 				// loop over all the field initializations
-				//initMap.forEach((fieldName, expr) -> {
-				//  register the field name with the right slot
-				//  clazz.register(...);
-				//   visit the initialization expression
-				//  visit(...);
-				//});
+				initMap.forEach((fieldName, expr) -> {
+				  //  register the field name with the right slot
+				  clazz.register(fieldName, expr);
+				  //   visit the initialization expression
+				  visit(expr, env, buffer, dict);
+				});
 				// emit a NEW with the class
-				//buffer.emit(...).emit(...);
+				buffer.emit(NEW).emit(encodeDictObject(clazz, dict));
 			}
 			case FieldAccess(Expr receiver, String name, int lineNumber) -> {
 				throw new UnsupportedOperationException("TODO FieldAccess");
