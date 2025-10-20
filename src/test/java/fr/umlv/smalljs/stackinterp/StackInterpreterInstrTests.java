@@ -338,7 +338,7 @@ public class StackInterpreterInstrTests {
 	@Nested
 	public class Q9 {
 		@Test
-		public void printAnUndefindeVariable() {
+		public void printAnUndefinedVariable() {
 			// print(a);
 			// var a = 2;
 			var dict = new Dictionary();
@@ -1027,7 +1027,7 @@ public class StackInterpreterInstrTests {
 			assertEquals("2\n9\n", execute(new Code(main, 1, 1), dict));
 		}
 	}
-/**
+
 	@Nested
 	public class Q13 {
 		@Test
@@ -1297,5 +1297,4 @@ public class StackInterpreterInstrTests {
 					execute(new Code(instrs, 1, 2), dict));
 		}
 	}
-	*/
 }
